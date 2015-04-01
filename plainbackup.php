@@ -3,6 +3,28 @@
 require_once('config.php');
 // Include helper functions
 require_once('lib/functions.php');
+
+$shortopts  = "ih";
+$longopts = array(
+	'help',
+	'incremental'
+);
+$options = getopt($shortopts, $longopts);
+if (array_key_exists('h', $options) || array_key_exists('help', $options)) {
+	echo "Usage: php plainbackup.php [options]
+
+	php plainbackup.php -i            Run incremental backup
+	php plainbackup.php --incremental Run incremental backup
+
+"; 
+	exit(0);
+}
+
+$full_backup = true;
+if (array_key_exists('i', $options) || array_key_exists('incremental', $options)) {
+	$full_backup = false;
+}
+
 // Get us the current date
 $today = date('Ymd');
 // Initialize SQLite
@@ -37,7 +59,10 @@ $stmt->execute();
 $hostname = gethostname();
 echo "plainbackup running on $hostname on ".date(DATE_RFC822)."\n";
 
-$archive_prefix = LOCAL_TMP_PREFIX."$today-$count";
+$archive_prefix = LOCAL_TMP_PREFIX.$today.'-'.sprintf('%03d', $count);
+if ($full_backup) {
+	$archive_prefix .= '-full';
+}
 
 $files = array();
 
@@ -56,25 +81,29 @@ $unchanged_files = 0;
 
 foreach ($files as $f) {
 	$hash = md5_file($f);
-	$sel_stmt = $db->prepare('SELECT hash FROM file_to_hash WHERE file = :filename');
-	if (!$sel_stmt) {
-		die("Could not prepare hash select for $f\n");
-	}
-	$sel_stmt->bindValue(':filename', $f);
-	$result = $sel_stmt->execute();
-	if (!$result) {
-		die("Could not select hash for $f\n");
-	}
-	if ($persitent = $result->fetchArray(SQLITE3_NUM)) {
-		if ($persitent[0] == $hash) {
-			//echo "$f not changed\n";
-			$unchanged_files++;
-			continue;
-		} else {
-			$changed_files++;
-		}
-	} else {
+	if ($full_backup) {
 		$new_files++;
+	} else {
+		$sel_stmt = $db->prepare('SELECT hash FROM file_to_hash WHERE file = :filename');
+		if (!$sel_stmt) {
+			die("Could not prepare hash select for $f\n");
+		}
+		$sel_stmt->bindValue(':filename', $f);
+		$result = $sel_stmt->execute();
+		if (!$result) {
+			die("Could not select hash for $f\n");
+		}
+		if ($persitent = $result->fetchArray(SQLITE3_NUM)) {
+			if ($persitent[0] == $hash) {
+				//echo "$f not changed\n";
+				$unchanged_files++;
+				continue;
+			} else {
+				$changed_files++;
+			}
+		} else {
+			$new_files++;
+		}
 	}
 	$stmt = $db->prepare("INSERT OR REPLACE INTO file_to_hash (file, hash) VALUES (:filename, :hashvalue) ");
 	if (!$stmt) {
