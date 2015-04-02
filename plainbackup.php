@@ -127,6 +127,8 @@ if ($return_var == 0) {
 $targzgpg = "$targz.gpg";
 exec('gpg --passphrase-file secret.txt --symmetric --cipher-algo AES256 -o '.escapeshellarg($targzgpg).' '.escapeshellarg($targz));
 
+unlink($targz);
+
 echo "Connecting to ".REMOTE_HOST."\n";
 $connection = ssh2_connect(REMOTE_HOST, 22);
 if (!$connection) {
@@ -144,6 +146,8 @@ $remote_file = $remote_path.'/'.$targzgpg;
 if (!ssh2_scp_send($connection, $targzgpg, $remote_file)) {
 	die("Could not upload $targzgpg\n");
 }
+
+unlink($targzgpg);
 
 echo "Statistic:
 
